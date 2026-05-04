@@ -6,6 +6,9 @@ export default function AuthPage() {
   const { role } = useParams();
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Validate role parameter
   if (role !== 'artist' && role !== 'client') {
@@ -24,14 +27,46 @@ export default function AuthPage() {
   const roleDisplay = role === 'artist' ? 'Artist' : 'Client';
   const toggleMode = () => setIsLogin(!isLogin);
 
-  const handleSubmit = (e) => {
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Placeholder for actual authentication logic
-    console.log(`Submitting ${isLogin ? 'Login' : 'Signup'} for ${roleDisplay}`);
-    
-    // Fake redirection to the appropriate dashboard
-    const dashboardPath = role === 'artist' ? '/artist/dashboard' : '/client/dashboard';
-    navigate(dashboardPath);
+    setError('');
+    setLoading(true);
+
+    try {
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
+      const body = isLogin 
+        ? { email: formData.email, password: formData.password }
+        : { email: formData.email, password: formData.password, name: formData.name, role };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Authentication failed');
+      }
+
+      // Store token
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+
+      const dashboardPath = role === 'artist' ? '/artist/dashboard' : '/client/dashboard';
+      navigate(dashboardPath);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -83,6 +118,12 @@ export default function AuthPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">
+                {error}
+              </div>
+            )}
+
             {!isLogin && (
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1">Full Name</label>
@@ -92,6 +133,9 @@ export default function AuthPage() {
                   </div>
                   <input
                     type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
                     required
                     className="block w-full pl-10 pr-3 py-2.5 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                     placeholder="Jane Doe"
@@ -108,6 +152,9 @@ export default function AuthPage() {
                 </div>
                 <input
                   type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
                   required
                   className="block w-full pl-10 pr-3 py-2.5 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                   placeholder="you@example.com"
@@ -123,6 +170,9 @@ export default function AuthPage() {
                 </div>
                 <input
                   type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
                   required
                   className="block w-full pl-10 pr-3 py-2.5 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                   placeholder="••••••••"
@@ -152,9 +202,10 @@ export default function AuthPage() {
 
             <button
               type="submit"
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all hover:shadow-md active:scale-[0.98]"
+              disabled={loading}
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-70"
             >
-              {isLogin ? 'Sign In' : 'Create Account'}
+              {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
             </button>
           </form>
 

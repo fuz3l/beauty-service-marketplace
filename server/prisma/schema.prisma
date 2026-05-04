@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      String   // 'artist' or 'client'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  artistProfile Artist?
+  clientBookings Booking[]
+  reviewsLeft   Review[]
+}
+
+model Artist {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  isVerified  Boolean  @default(false)
+  location    String?
+  avatar      String?
+  speciality  String?
+  
+  services    Service[]
+  bookings    Booking[]
+  reviews     Review[]
+  portfolio   PortfolioImage[]
+}
+
+model PortfolioImage {
+  id          String   @id @default(uuid())
+  artistId    String
+  artist      Artist   @relation(fields: [artistId], references: [id])
+  url         String
+  createdAt   DateTime @default(now())
+}
+
+model Service {
+  id          String   @id @default(uuid())
+  artistId    String
+  artist      Artist   @relation(fields: [artistId], references: [id])
+  title       String
+  price       Int
+  serviceType String   // 'bridal', 'party', etc.
+  isActive    Boolean  @default(true)
+  
+  bookings    Booking[]
+}
+
+model Booking {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      User     @relation(fields: [clientId], references: [id])
+  artistId    String
+  artist      Artist   @relation(fields: [artistId], references: [id])
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id])
+  
+  date        DateTime
+  time        String
+  status      String   @default("pending") // pending, confirmed, completed, rejected
+  createdAt   DateTime @default(now())
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  artistId    String
+  artist      Artist   @relation(fields: [artistId], references: [id])
+  clientId    String
+  client      User     @relation(fields: [clientId], references: [id])
+  
+  rating      Float
+  comment     String?
+  createdAt   DateTime @default(now())
+}
