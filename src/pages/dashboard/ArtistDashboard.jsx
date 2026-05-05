@@ -16,6 +16,9 @@ export default function ArtistDashboard() {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [profileComplete, setProfileComplete] = useState(true); // Default true for prototype
   const [copied, setCopied] = useState(false);
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState(null);
+  const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState(false);
 
   const navigate = useNavigate();
 
@@ -211,8 +214,8 @@ export default function ArtistDashboard() {
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-neutral-900">My Portfolio</h2>
-                <button onClick={uploadMockImage} className="text-rose-600 font-medium hover:underline flex items-center text-sm">
-                  <Upload className="w-4 h-4 mr-1" /> Upload Mock Photo
+                <button onClick={() => setIsPortfolioModalOpen(true)} className="text-rose-600 font-medium hover:underline flex items-center text-sm">
+                  <Upload className="w-4 h-4 mr-1" /> Upload Photo
                 </button>
               </div>
               
@@ -270,7 +273,7 @@ export default function ArtistDashboard() {
             <div className="bg-white rounded-2xl shadow-sm border border-neutral-100 p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold text-neutral-900">My Services</h2>
-                <button className="text-rose-600 p-1 hover:bg-rose-50 rounded"><Plus className="w-5 h-5"/></button>
+                <button onClick={() => { setEditingService(null); setIsServiceModalOpen(true); }} className="text-rose-600 p-1 hover:bg-rose-50 rounded"><Plus className="w-5 h-5"/></button>
               </div>
               {services.length > 0 ? (
                 <div className="space-y-3">
@@ -280,7 +283,7 @@ export default function ArtistDashboard() {
                         <p className="font-bold text-neutral-900 text-sm">{s.title}</p>
                         <p className="text-rose-600 font-medium text-sm">{formatPrice(s.price)}</p>
                       </div>
-                      <button className="text-neutral-400 hover:text-neutral-600"><Edit className="w-4 h-4" /></button>
+                      <button onClick={() => { setEditingService(s); setIsServiceModalOpen(true); }} className="text-neutral-400 hover:text-neutral-600"><Edit className="w-4 h-4" /></button>
                     </div>
                   ))}
                 </div>
@@ -312,6 +315,21 @@ export default function ArtistDashboard() {
           profile={profile} 
           onClose={() => setIsEditProfileOpen(false)} 
           onSave={() => { setIsEditProfileOpen(false); fetchDashboard(); }} 
+        />
+      )}
+
+      {isServiceModalOpen && (
+        <ServiceModal
+          service={editingService}
+          onClose={() => setIsServiceModalOpen(false)}
+          onSave={() => { setIsServiceModalOpen(false); fetchDashboard(); }}
+        />
+      )}
+
+      {isPortfolioModalOpen && (
+        <PortfolioModal
+          onClose={() => setIsPortfolioModalOpen(false)}
+          onSave={() => { setIsPortfolioModalOpen(false); fetchDashboard(); }}
         />
       )}
     </div>
@@ -427,6 +445,138 @@ const EditProfileModal = ({ profile, onClose, onSave }) => {
           <button type="submit" disabled={loading} className="w-full bg-rose-500 text-white font-bold py-3 rounded-xl hover:bg-rose-600 transition-colors mt-6">
             {loading ? 'Saving...' : 'Save Changes'}
           </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const ServiceModal = ({ service, onClose, onSave }) => {
+  const [title, setTitle] = useState(service?.title || '');
+  const [price, setPrice] = useState(service?.price || '');
+  const [serviceType, setServiceType] = useState(service?.serviceType || 'party');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const url = service ? `/api/services/${service.id}` : '/api/services';
+      const method = service ? 'PATCH' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ title, price, serviceType })
+      });
+      if (res.ok) onSave();
+      else {
+        const err = await res.json();
+        alert(`Error: ${err.error}`);
+      }
+    } catch (err) {
+      alert('Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this service?')) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/services/${service.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (res.ok) onSave();
+    } catch (err) {
+      alert('Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-neutral-900">{service ? 'Edit Service' : 'Add Service'}</h2>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600"><X className="w-6 h-6" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Title</label>
+            <input required type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-4 py-2 border border-neutral-300 rounded-xl focus:ring-rose-500 focus:border-rose-500" placeholder="e.g. Signature Makeup" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Price (₹)</label>
+            <input required type="number" value={price} onChange={e => setPrice(e.target.value)} className="w-full px-4 py-2 border border-neutral-300 rounded-xl focus:ring-rose-500 focus:border-rose-500" placeholder="e.g. 5000" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Category</label>
+            <select value={serviceType} onChange={e => setServiceType(e.target.value)} className="w-full px-4 py-2 border border-neutral-300 rounded-xl focus:ring-rose-500 focus:border-rose-500">
+              <option value="party">Party Makeup</option>
+              <option value="bridal">Bridal</option>
+              <option value="hair">Hair Styling</option>
+              <option value="skincare">Skincare</option>
+            </select>
+          </div>
+          <div className="flex gap-2 mt-6">
+            <button type="submit" disabled={loading} className="flex-1 bg-rose-500 text-white font-bold py-3 rounded-xl hover:bg-rose-600 transition-colors">{loading ? 'Saving...' : 'Save'}</button>
+            {service && (
+              <button type="button" onClick={handleDelete} disabled={loading} className="px-4 py-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"><Trash2 className="w-5 h-5"/></button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const PortfolioModal = ({ onClose, onSave }) => {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!url.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/portfolio/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ url })
+      });
+      if (res.ok) onSave();
+      else alert('Failed to add image');
+    } catch (err) {
+      alert('Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-neutral-900">Add Portfolio Image</h2>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600"><X className="w-6 h-6" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Image URL</label>
+            <input required type="url" value={url} onChange={e => setUrl(e.target.value)} className="w-full px-4 py-2 border border-neutral-300 rounded-xl focus:ring-rose-500 focus:border-rose-500" placeholder="https://example.com/image.jpg" />
+            <p className="text-xs text-neutral-500 mt-2">Right-click an image online and select "Copy Image Address", then paste it here.</p>
+          </div>
+          <button type="submit" disabled={loading} className="w-full bg-rose-500 text-white font-bold py-3 rounded-xl hover:bg-rose-600 transition-colors mt-6">{loading ? 'Adding...' : 'Add Image'}</button>
         </form>
       </div>
     </div>
