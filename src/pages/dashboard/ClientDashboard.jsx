@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Search, MapPin, Calendar, Clock, CheckCircle, Sparkles, Navigation, ChevronRight, X } from 'lucide-react';
+import { Search, MapPin, Calendar, Clock, Sparkles, ChevronRight, X } from 'lucide-react';
 import ClientNavbar from '../../components/layout/ClientNavbar';
 import ArtistCard from '../../components/shared/ArtistCard';
 
@@ -23,6 +23,7 @@ export default function ClientDashboard() {
   const [locationQuery, setLocationQuery] = useState('');
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -42,7 +43,7 @@ export default function ClientDashboard() {
         
         const [artistsRes, bookingsRes, categoriesRes] = await Promise.all([
           fetch('/api/artists?featured=true&limit=6', { headers }),
-          fetch('/api/bookings/my?limit=3', { headers }),
+          fetch('/api/bookings/my?limit=10', { headers }), // Increased limit to show more recent bookings
           fetch('/api/artists/categories', { headers })
         ]);
 
@@ -76,6 +77,17 @@ export default function ClientDashboard() {
     fetchAll();
   }, [navigate]);
 
+  useEffect(() => {
+    if (location.hash === '#bookings') {
+      setTimeout(() => {
+        const element = document.getElementById('bookings');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100); // Small delay to ensure render
+    }
+  }, [location.hash, bookings.length]);
+
   const handleSearch = (e) => {
     e.preventDefault();
     navigate(`/browse?search=${encodeURIComponent(searchQuery)}&location=${encodeURIComponent(locationQuery)}`);
@@ -90,10 +102,47 @@ export default function ClientDashboard() {
     return 'Good evening';
   };
 
-  // Stats computed from bookings
-  const upcomingCount = bookings.filter(b => b.status === 'confirmed' && new Date(b.date) >= new Date()).length;
-  const pendingCount = bookings.filter(b => b.status === 'pending').length;
-  const completedCount = bookings.filter(b => b.status === 'completed').length;
+  const activeBookings = bookings.filter(b => b.status !== 'cancelled' && b.status !== 'rejected');
+  const rejectedBookings = bookings.filter(b => b.status === 'rejected');
+  const pendingCount = activeBookings.filter(b => b.status === 'pending').length;
+
+  const handleDismissNotification = async (id) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setBookings(prev => prev.filter(b => b.id !== id));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCancelBooking = async (id) => {
+    if (!window.confirm('Are you sure you want to cancel this booking?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/bookings/${id}/status`, {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ status: 'cancelled' })
+      });
+      if (res.ok) {
+        setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b));
+      } else {
+        alert('Failed to cancel booking');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error');
+    }
+  };
 
   if (!user) return null;
 
@@ -115,6 +164,31 @@ export default function ClientDashboard() {
       </section>
 
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full -mt-8">
+        
+        {/* Notifications */}
+        {rejectedBookings.length > 0 && (
+          <div className="mb-8 space-y-3 relative z-20">
+            {rejectedBookings.map(b => (
+              <div key={b.id} className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl flex items-center justify-between shadow-sm">
+                <div className="flex items-center">
+                  <div className="bg-red-100 p-2 rounded-full mr-3 text-red-600">
+                    <X className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="font-bold">{b.artist?.user?.name || 'Your artist'}</span> has cancelled/rejected your <span className="font-bold">{b.service?.title}</span> booking for {format(new Date(b.date), 'MMM d, yyyy')}.
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleDismissNotification(b.id)}
+                  className="text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Error State */}
         {error && (
           <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-8 flex items-center justify-between">
@@ -123,48 +197,7 @@ export default function ClientDashboard() {
           </div>
         )}
 
-        {/* Quick Stats Bar */}
-        <div className="grid grid-cols-3 gap-3 md:gap-6 mb-10">
-          {loading ? (
-            Array(3).fill(0).map((_, i) => <div key={i} className="animate-pulse bg-white rounded-xl h-24 shadow-sm border border-neutral-100"></div>)
-          ) : (
-            <>
-              <div onClick={() => navigate('/dashboard/client/bookings?tab=upcoming')} className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4 md:p-6 cursor-pointer hover:shadow-md transition-shadow group">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-2xl md:text-3xl font-extrabold text-neutral-900">{upcomingCount}</div>
-                    <div className="text-xs md:text-sm text-neutral-500 font-medium mt-1">Upcoming</div>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 group-hover:bg-blue-100 transition-colors">
-                    <Calendar className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
-              <div onClick={() => navigate('/dashboard/client/bookings?tab=pending')} className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4 md:p-6 cursor-pointer hover:shadow-md transition-shadow group">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-2xl md:text-3xl font-extrabold text-neutral-900">{pendingCount}</div>
-                    <div className="text-xs md:text-sm text-neutral-500 font-medium mt-1">Pending</div>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-500 group-hover:bg-amber-100 transition-colors">
-                    <Clock className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
-              <div onClick={() => navigate('/dashboard/client/bookings?tab=completed')} className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4 md:p-6 cursor-pointer hover:shadow-md transition-shadow group">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-2xl md:text-3xl font-extrabold text-neutral-900">{completedCount}</div>
-                    <div className="text-xs md:text-sm text-neutral-500 font-medium mt-1">Completed</div>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-500 group-hover:bg-green-100 transition-colors">
-                    <CheckCircle className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+
 
         {/* Search Bar */}
         <div className="mb-12">
@@ -279,16 +312,16 @@ export default function ClientDashboard() {
              </div>
           </div>
         ) : bookings.length > 0 ? (
-          <div className="mb-12">
+          <div id="bookings" className="mb-12 scroll-mt-24">
             <div className="flex justify-between items-end mb-6">
               <h2 className="text-2xl font-bold text-neutral-900">Your Recent Bookings</h2>
-              <Link to="/dashboard/client/bookings" className="text-rose-600 font-medium hover:underline flex items-center">
+              <Link to="/client/dashboard#bookings" className="text-rose-600 font-medium hover:underline flex items-center">
                 View All <ChevronRight className="w-4 h-4 ml-1" />
               </Link>
             </div>
             
             <div className="space-y-4">
-              {bookings.map(booking => {
+              {activeBookings.map(booking => {
                 const statusColors = {
                   pending: 'bg-yellow-100 text-yellow-700',
                   confirmed: 'bg-green-100 text-green-700',
@@ -326,18 +359,18 @@ export default function ClientDashboard() {
                     </div>
                     
                     <div className="flex sm:flex-col items-center justify-end space-x-3 sm:space-x-0 sm:space-y-2">
-                      {booking.status === 'confirmed' && (
-                        <button className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-medium hover:bg-neutral-800 transition-colors">
-                          <Navigation className="w-4 h-4 mr-2" /> Directions
-                        </button>
-                      )}
-                      {booking.status === 'completed' && (
-                        <button className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 border border-rose-200 text-rose-600 rounded-xl text-sm font-medium hover:bg-rose-50 transition-colors">
-                          Book Again
-                        </button>
-                      )}
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        booking.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                        booking.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                        booking.status === 'completed' ? 'bg-gray-100 text-gray-600' :
+                        'bg-red-100 text-red-600'
+                      }`}>{booking.status}</span>
+                      
                       {booking.status === 'pending' && (
-                        <button className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 border border-neutral-200 text-neutral-600 rounded-xl text-sm font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors">
+                        <button 
+                          onClick={() => handleCancelBooking(booking.id)}
+                          className="flex items-center justify-center px-4 py-2 border border-neutral-200 text-neutral-600 rounded-xl text-sm font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                        >
                           <X className="w-4 h-4 mr-2" /> Cancel
                         </button>
                       )}
@@ -348,7 +381,7 @@ export default function ClientDashboard() {
             </div>
           </div>
         ) : (
-          <div className="mb-12 bg-gradient-to-r from-rose-500 to-pink-500 rounded-3xl p-8 md:p-12 text-center text-white shadow-lg relative overflow-hidden">
+          <div id="bookings" className="mb-12 bg-gradient-to-r from-rose-500 to-pink-500 rounded-3xl p-8 md:p-12 text-center text-white shadow-lg relative overflow-hidden scroll-mt-24">
             <div className="absolute top-0 right-0 -mt-8 -mr-8 w-48 h-48 bg-white opacity-10 rounded-full blur-2xl"></div>
             <div className="absolute bottom-0 left-0 -mb-8 -ml-8 w-48 h-48 bg-white opacity-10 rounded-full blur-2xl"></div>
             

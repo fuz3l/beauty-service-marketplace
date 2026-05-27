@@ -146,7 +146,22 @@ export default function ArtistDashboard() {
   };
 
   const pendingBookings = bookings.filter(b => b.status === 'pending');
-  const todayBookings = bookings.filter(b => b.status === 'confirmed' && isThisMonth(new Date(b.date))); // Mocking today for dev
+  const todayBookings = bookings.filter(b => b.status === 'confirmed' && isThisMonth(new Date(b.date))); 
+  const cancelledBookings = bookings.filter(b => b.status === 'cancelled');
+
+  const handleDismissNotification = async (id) => {
+    try {
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (res.ok) {
+        setBookings(prev => prev.filter(b => b.id !== id));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   if (!user) return null;
 
@@ -176,6 +191,30 @@ export default function ArtistDashboard() {
 
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full -mt-8">
         
+        {/* Notifications */}
+        {cancelledBookings.length > 0 && (
+          <div className="mb-8 space-y-3">
+            {cancelledBookings.map(b => (
+              <div key={b.id} className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl flex items-center justify-between shadow-sm">
+                <div className="flex items-center">
+                  <div className="bg-red-100 p-2 rounded-full mr-3 text-red-600">
+                    <X className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="font-bold">{b.client?.name || 'A client'}</span> has cancelled their <span className="font-bold">{b.service?.title}</span> booking on {format(new Date(b.date), 'MMM d, yyyy')}.
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleDismissNotification(b.id)}
+                  className="text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           <StatCard title="Pending Requests" value={stats.pending} icon={<Clock />} color="text-amber-500" bg="bg-amber-50" />
@@ -257,7 +296,17 @@ export default function ArtistDashboard() {
                           <p className="font-bold text-neutral-900 text-sm">{b.service?.title}</p>
                           <p className="text-neutral-500 text-sm">{b.client?.name || 'Client'}</p>
                           <div className="mt-2 flex space-x-2">
-                            <button onClick={() => updateBookingStatus(b.id, 'completed')} className="text-xs bg-white border border-neutral-200 px-2 py-1 rounded text-neutral-700 hover:bg-neutral-100">Mark Complete</button>
+                            <button onClick={() => updateBookingStatus(b.id, 'completed')} className="text-xs bg-white border border-neutral-200 px-2 py-1 rounded text-neutral-700 hover:bg-neutral-100 font-medium">Mark Complete</button>
+                            <button 
+                              onClick={() => {
+                                if(window.confirm('Are you sure you want to cancel this booking?')) {
+                                  updateBookingStatus(b.id, 'rejected');
+                                }
+                              }} 
+                              className="text-xs bg-red-50 border border-red-200 px-2 py-1 rounded text-red-600 hover:bg-red-100 font-medium"
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </div>
                       </div>

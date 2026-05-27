@@ -217,6 +217,34 @@ app.get('/api/artists/search', async (req, res) => {
   }
 });
 
+// Get Categories
+app.get('/api/artists/categories', async (req, res) => {
+  try {
+    const services = await prisma.service.findMany({
+      where: { isActive: true },
+      select: { serviceType: true, artistId: true }
+    });
+
+    const categoryMap = {};
+    services.forEach(s => {
+      const type = s.serviceType.toLowerCase();
+      if (!categoryMap[type]) categoryMap[type] = new Set();
+      categoryMap[type].add(s.artistId);
+    });
+
+    const categories = Object.keys(categoryMap).map(type => ({
+      name: type.charAt(0).toUpperCase() + type.slice(1),
+      count: categoryMap[type].size,
+      queryParam: type
+    }));
+
+    res.json({ categories });
+  } catch (error) {
+    console.error('Fetch categories error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get Single Artist Profile
 app.get('/api/artists/:id', async (req, res) => {
   try {
@@ -261,33 +289,7 @@ app.get('/api/artists/:id', async (req, res) => {
   }
 });
 
-// Get Categories
-app.get('/api/artists/categories', async (req, res) => {
-  try {
-    const services = await prisma.service.findMany({
-      where: { isActive: true },
-      select: { serviceType: true, artistId: true }
-    });
 
-    const categoryMap = {};
-    services.forEach(s => {
-      const type = s.serviceType.toLowerCase();
-      if (!categoryMap[type]) categoryMap[type] = new Set();
-      categoryMap[type].add(s.artistId);
-    });
-
-    const categories = Object.keys(categoryMap).map(type => ({
-      name: type.charAt(0).toUpperCase() + type.slice(1),
-      count: categoryMap[type].size,
-      queryParam: type
-    }));
-
-    res.json({ categories });
-  } catch (error) {
-    console.error('Fetch categories error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 // Create Booking
 app.post('/api/bookings', authenticateToken, async (req, res) => {
@@ -401,14 +403,55 @@ app.get('/api/bookings/artist', authenticateToken, getArtistProfile, async (req,
 });
 
 // Update Booking Status
-app.patch('/api/bookings/:id/status', authenticateToken, getArtistProfile, async (req, res) => {
+app.patch('/api/bookings/:id/status', authenticateToken, async (req, res) => {
   try {
     const { status } = req.body;
-    const booking = await prisma.booking.update({
-      where: { id: req.params.id, artistId: req.artist.id }, // Note: Prisma may not allow compound where if not unique, wait, id is unique.
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: { artist: true }
+    });
+
+    if (!booking) return res.status(404).json({ error: 'Not found' });
+
+    // Client can only cancel
+    if (req.user.role === 'client') {
+      if (booking.clientId !== req.user.userId) return res.status(403).json({ error: 'Forbidden' });
+      if (status !== 'cancelled') return res.status(400).json({ error: 'Clients can only cancel' });
+    } 
+    // Artist can update to various statuses
+    else if (req.user.role === 'artist') {
+      if (booking.artist.userId !== req.user.userId) return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const updatedBooking = await prisma.booking.update({
+      where: { id: req.params.id },
       data: { status }
     });
-    res.json({ booking });
+    res.json({ booking: updatedBooking });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete Booking
+app.delete('/api/bookings/:id', authenticateToken, async (req, res) => {
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: { artist: true }
+    });
+    
+    if (!booking) return res.status(404).json({ error: 'Not found' });
+
+    if (req.user.role === 'client') {
+      if (booking.clientId !== req.user.userId) return res.status(403).json({ error: 'Forbidden' });
+    } else if (req.user.role === 'artist') {
+      if (booking.artist.userId !== req.user.userId) return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    await prisma.booking.delete({ where: { id: req.params.id } });
+    return res.json({ message: 'Booking deleted' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });

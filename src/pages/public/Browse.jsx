@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, MapPin, SlidersHorizontal, Sparkles, Navigation } from 'lucide-react';
 import ArtistCard from '../../components/shared/ArtistCard';
+import ClientNavbar from '../../components/layout/ClientNavbar';
 
 export default function Browse() {
   const [searchParams] = useSearchParams();
@@ -16,6 +17,14 @@ export default function Browse() {
   
   const [artists, setArtists] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
 
   useEffect(() => {
     const fetchArtists = async () => {
@@ -78,15 +87,19 @@ export default function Browse() {
 
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col font-sans">
-      <nav className="bg-white border-b border-neutral-200 sticky top-0 z-50 p-4 shadow-sm">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-rose-500 font-bold text-xl cursor-pointer" onClick={() => navigate('/')}>
-            <Sparkles className="w-6 h-6" />
-            <span>GlamBook</span>
+      {user && user.role === 'client' ? (
+        <ClientNavbar user={user} />
+      ) : (
+        <nav className="bg-white border-b border-neutral-200 sticky top-0 z-50 p-4 shadow-sm">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-rose-500 font-bold text-xl cursor-pointer" onClick={() => navigate('/')}>
+              <Sparkles className="w-6 h-6" />
+              <span>GlamBook</span>
+            </div>
+            <button onClick={() => navigate(-1)} className="text-neutral-500 hover:text-rose-500 font-medium">Back</button>
           </div>
-          <button onClick={() => navigate(-1)} className="text-neutral-500 hover:text-rose-500 font-medium">Back</button>
-        </div>
-      </nav>
+        </nav>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-1 flex flex-col md:flex-row gap-8">
         <aside className="w-full md:w-80 flex-shrink-0">

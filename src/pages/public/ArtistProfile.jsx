@@ -262,7 +262,7 @@ const BookingModal = ({ artistId, service, onClose }) => {
           </div>
           <h2 className="text-3xl font-extrabold text-neutral-900 mb-2">Booking Requested!</h2>
           <p className="text-neutral-500 mb-8 text-lg">Your request has been sent to the artist. They will confirm it shortly.</p>
-          <button onClick={() => navigate('/client/dashboard')} className="w-full bg-rose-500 text-white font-bold py-4 rounded-xl hover:bg-rose-600 transition-colors text-lg">
+          <button onClick={() => navigate('/client/dashboard#bookings')} className="w-full bg-rose-500 text-white font-bold py-4 rounded-xl hover:bg-rose-600 transition-colors text-lg">
             Go to My Bookings
           </button>
         </div>
